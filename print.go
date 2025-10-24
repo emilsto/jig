@@ -17,31 +17,31 @@ const (
 )
 
 // printSuccess prints a success message with a checkmark
-func printSuccess(format string, args ...interface{}) {
+func printSuccess(format string, args ...any) {
 	msg := fmt.Sprintf(format, args...)
 	fmt.Printf("%s✓ %s%s\n", colorGreen, msg, colorReset)
 }
 
 // printError prints an error message
-func printError(format string, args ...interface{}) {
+func printError(format string, args ...any) {
 	msg := fmt.Sprintf(format, args...)
 	fmt.Printf("%s✗ %s%s\n", colorRed, msg, colorReset)
 }
 
 // printWarning prints a warning message
-func printWarning(format string, args ...interface{}) {
+func printWarning(format string, args ...any) {
 	msg := fmt.Sprintf(format, args...)
 	fmt.Printf("%s⚠ %s%s\n", colorYellow, msg, colorReset)
 }
 
 // printInfo prints an informational message
-func printInfo(format string, args ...interface{}) {
+func printInfo(format string, args ...any) {
 	msg := fmt.Sprintf(format, args...)
 	fmt.Printf("%s%s%s\n", colorBlue, msg, colorReset)
 }
 
 // printDim prints dimmed text for secondary information
-func printDim(format string, args ...interface{}) {
+func printDim(format string, args ...any) {
 	msg := fmt.Sprintf(format, args...)
 	fmt.Printf("%s%s%s\n", colorDim, msg, colorReset)
 }
@@ -62,7 +62,7 @@ func printStatus(text string) string {
 }
 
 // printBold prints bold text
-func printBold(format string, args ...interface{}) {
+func printBold(format string, args ...any) {
 	msg := fmt.Sprintf(format, args...)
 	fmt.Printf("%s%s%s\n", colorBold, msg, colorReset)
 }
@@ -98,7 +98,7 @@ func printTableHeader(maxSummaryLen int) {
 }
 
 // printIssueDetails prints detailed information about an issue
-func printIssueDetails(issue *DetailedIssue, extractDesc func(interface{}) string) {
+func printIssueDetails(issue *DetailedIssue, extractDesc func(any) string) {
 	fmt.Println()
 	printBold("Issue Details:")
 	fmt.Printf("  %sKey:%s          %s\n", colorDim, colorReset, printHighlight(issue.Key))

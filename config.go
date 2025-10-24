@@ -12,18 +12,35 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
+type JigRC struct {
+	ProjectName string `toml:"project_name"`
+	ProjectID   string `toml:"project_id"`
+	BoardName   string `toml:"board_name"`
+	BoardID     int    `toml:"board_id"`
+}
+
+type Board struct {
+	Name string
+	ID   int
+}
+
+type Project struct {
+	Name   string
+	ID     string
+	Boards []Board
+}
+
 type Config struct {
 	Api struct {
-		Apikey    string
-		Baseurl   string
-		Agileurl  string
-		Email     string
-		Projectid string
-		Boardid   int
-	}
+		Apikey   string `toml:"apikey"`
+		Baseurl  string `toml:"baseurl"`
+		Agileurl string `toml:"agileurl"`
+		Email    string `toml:"email"`
+	} `toml:"api"`
 	Git struct {
-		Branchbase string
-	}
+		Branchbase string `toml:"branchbase"`
+	} `toml:"git"`
+	Projects []Project `toml:"projects"`
 }
 
 func findConfig(filename string) string {
@@ -80,7 +97,7 @@ func promptForConfig() (*Config, error) {
 	reader := bufio.NewReader(os.Stdin)
 	config := &Config{}
 
-	printWarning("No config file found. Let's create one.")
+	printWarning("No config file found.")
 	fmt.Println()
 
 	printPrompt("Enter Jira API Key")
@@ -90,19 +107,14 @@ func promptForConfig() (*Config, error) {
 	}
 	config.Api.Apikey = strings.TrimSpace(apikey)
 
-	fmt.Printf("%sEnter Jira Base URL %s(e.g., https://yourcompany.atlassian.net)%s:%s ", colorYellow, colorDim, colorYellow, colorReset)
-	baseurl, err := reader.ReadString('\n')
+	fmt.Printf("%sEnter Jira Company Name %s(e.g., yourcompany → https://yourcompany.atlassian.net)%s:%s ", colorYellow, colorDim, colorYellow, colorReset)
+	companyName, err := reader.ReadString('\n')
 	if err != nil {
 		return nil, err
 	}
-	config.Api.Baseurl = strings.TrimSpace(baseurl)
-
-	fmt.Printf("%sEnter Jira Agile URL %s(e.g., https://yourcompany.atlassian.net/rest/agile/1.0)%s:%s ", colorYellow, colorDim, colorYellow, colorReset)
-	agileurl, err := reader.ReadString('\n')
-	if err != nil {
-		return nil, err
-	}
-	config.Api.Agileurl = strings.TrimSpace(agileurl)
+	companyName = strings.TrimSpace(companyName)
+	config.Api.Baseurl = fmt.Sprintf("https://%s.atlassian.net/rest/api/3", companyName)
+	config.Api.Agileurl = fmt.Sprintf("https://%s.atlassian.net/rest/agile/1.0", companyName)
 
 	printPrompt("Enter Jira Email")
 	email, err := reader.ReadString('\n')
@@ -111,24 +123,118 @@ func promptForConfig() (*Config, error) {
 	}
 	config.Api.Email = strings.TrimSpace(email)
 
-	printPrompt("Enter Jira Project ID")
-	projectid, err := reader.ReadString('\n')
+	// Fetch available projects
+	fmt.Println()
+	printInfo("Fetching available projects...")
+	jiraProjects, err := getAllProjects(config.Api.Baseurl, config.Api.Email, config.Api.Apikey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch projects: %v", err)
+	}
+
+	if len(jiraProjects) == 0 {
+		return nil, fmt.Errorf("no projects found for this account")
+	}
+
+	// Display projects
+	fmt.Println()
+	printBold("Available Projects:")
+	for i, project := range jiraProjects {
+		fmt.Printf("  %d. %s (Key: %s, ID: %s)\n", i+1, project.Name, printHighlight(project.Key), project.ID)
+	}
+
+	// Select projects
+	fmt.Println()
+	printPrompt("Select projects (comma-separated numbers, or 'all' for all projects)")
+	projectInput, err := reader.ReadString('\n')
 	if err != nil {
 		return nil, err
 	}
-	config.Api.Projectid = strings.TrimSpace(projectid)
+	projectInput = strings.TrimSpace(projectInput)
 
-	printPrompt("Enter Jira Board ID")
-	boardidStr, err := reader.ReadString('\n')
-	if err != nil {
-		return nil, err
+	var selectedProjectIndices []int
+	if strings.ToLower(projectInput) == "all" {
+		for i := range jiraProjects {
+			selectedProjectIndices = append(selectedProjectIndices, i)
+		}
+	} else {
+		for _, numStr := range strings.Split(projectInput, ",") {
+			num, err := strconv.Atoi(strings.TrimSpace(numStr))
+			if err != nil || num < 1 || num > len(jiraProjects) {
+				return nil, fmt.Errorf("invalid project selection: %s", numStr)
+			}
+			selectedProjectIndices = append(selectedProjectIndices, num-1)
+		}
 	}
-	boardid, err := strconv.Atoi(strings.TrimSpace(boardidStr))
-	if err != nil {
-		return nil, fmt.Errorf("invalid board ID: %v", err)
-	}
-	config.Api.Boardid = boardid
 
+	// Fetch boards for selected projects
+	config.Projects = []Project{}
+	for _, idx := range selectedProjectIndices {
+		jiraProject := jiraProjects[idx]
+
+		fmt.Println()
+		printInfo("Fetching boards for project %s...", jiraProject.Name)
+
+		jiraBoards, err := getProjectBoards(config.Api.Agileurl, jiraProject.Key, config.Api.Email, config.Api.Apikey)
+		if err != nil {
+			printWarning("Failed to fetch boards for %s: %v", jiraProject.Name, err)
+			continue
+		}
+
+		if len(jiraBoards) == 0 {
+			printWarning("No boards found for project %s", jiraProject.Name)
+			continue
+		}
+
+		fmt.Println()
+		printBold("Boards in %s:", jiraProject.Name)
+		for i, board := range jiraBoards {
+			fmt.Printf("  %d. %s (ID: %d, Type: %s)\n", i+1, board.Name, board.ID, board.Type)
+		}
+
+		fmt.Println()
+		printPrompt(fmt.Sprintf("Select boards for %s (comma-separated numbers, or 'all')", jiraProject.Name))
+		boardInput, err := reader.ReadString('\n')
+		if err != nil {
+			return nil, err
+		}
+		boardInput = strings.TrimSpace(boardInput)
+
+		var selectedBoards []Board
+		if strings.ToLower(boardInput) == "all" {
+			for _, jiraBoard := range jiraBoards {
+				selectedBoards = append(selectedBoards, Board{
+					Name: jiraBoard.Name,
+					ID:   jiraBoard.ID,
+				})
+			}
+		} else {
+			for _, numStr := range strings.Split(boardInput, ",") {
+				num, err := strconv.Atoi(strings.TrimSpace(numStr))
+				if err != nil || num < 1 || num > len(jiraBoards) {
+					return nil, fmt.Errorf("invalid board selection: %s", numStr)
+				}
+				jiraBoard := jiraBoards[num-1]
+				selectedBoards = append(selectedBoards, Board{
+					Name: jiraBoard.Name,
+					ID:   jiraBoard.ID,
+				})
+			}
+		}
+
+		if len(selectedBoards) > 0 {
+			config.Projects = append(config.Projects, Project{
+				Name:   jiraProject.Name,
+				ID:     jiraProject.Key,
+				Boards: selectedBoards,
+			})
+		}
+	}
+
+	if len(config.Projects) == 0 {
+		return nil, fmt.Errorf("no projects with boards were selected")
+	}
+
+	fmt.Println()
 	fmt.Printf("%sEnter Git Branch Base %s(e.g., main, master, develop)%s:%s ", colorYellow, colorDim, colorYellow, colorReset)
 	branchbase, err := reader.ReadString('\n')
 	if err != nil {
@@ -153,7 +259,6 @@ func saveConfig(config *Config, filepath string) error {
 	}
 	defer file.Close()
 
-	// Encode config to TOML
 	encoder := toml.NewEncoder(file)
 	if err := encoder.Encode(config); err != nil {
 		return fmt.Errorf("failed to encode config: %v", err)
@@ -189,4 +294,80 @@ func getOrCreateConfig(filename string) (*Config, error) {
 	printSuccess("Config file created at: %s", printHighlight(configPath))
 	fmt.Println()
 	return config, nil
+}
+
+// findJigRC looks for .jigrc file starting from current directory and traversing up
+func findJigRC() string {
+	currentDir, err := os.Getwd()
+	if err != nil {
+		return ""
+	}
+
+	// Traverse up from current directory
+	for {
+		jigrcPath := filepath.Join(currentDir, ".jigrc")
+		if _, err := os.Stat(jigrcPath); err == nil {
+			return jigrcPath
+		}
+
+		// Move to parent directory
+		parent := filepath.Dir(currentDir)
+		if parent == currentDir {
+			// Reached root directory
+			break
+		}
+		currentDir = parent
+	}
+
+	return ""
+}
+
+// loadJigRC loads .jigrc configuration
+func loadJigRC(filepath string) (*JigRC, error) {
+	file, err := os.Open(filepath)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	stat, err := file.Stat()
+	if err != nil {
+		return nil, err
+	}
+
+	blob := make([]byte, stat.Size())
+	_, err = bufio.NewReader(file).Read(blob)
+	if err != nil && err != io.EOF {
+		return nil, err
+	}
+
+	jigrc := &JigRC{}
+	_, err = toml.Decode(string(blob), jigrc)
+	if err != nil {
+		return nil, err
+	}
+
+	return jigrc, nil
+}
+
+// saveJigRC saves .jigrc configuration to current directory
+func saveJigRC(jigrc *JigRC) error {
+	currentDir, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+
+	filepath := filepath.Join(currentDir, ".jigrc")
+	file, err := os.Create(filepath)
+	if err != nil {
+		return fmt.Errorf("failed to create .jigrc file: %v", err)
+	}
+	defer file.Close()
+
+	encoder := toml.NewEncoder(file)
+	if err := encoder.Encode(jigrc); err != nil {
+		return fmt.Errorf("failed to encode .jigrc: %v", err)
+	}
+
+	return nil
 }

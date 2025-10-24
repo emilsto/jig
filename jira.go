@@ -36,8 +36,8 @@ type Issue struct {
 type DetailedIssue struct {
 	Key    string `json:"key"`
 	Fields struct {
-		Summary     string      `json:"summary"`
-		Description interface{} `json:"description"`
+		Summary     string `json:"summary"`
+		Description any    `json:"description"`
 		Status      struct {
 			Name string `json:"name"`
 		} `json:"status"`
@@ -58,7 +58,7 @@ type DetailedIssue struct {
 }
 
 // extractDescription extracts text from Jira description field (handles both string and ADF format)
-func extractDescription(desc interface{}) string {
+func extractDescription(desc any) string {
 	if desc == nil {
 		return ""
 	}
@@ -69,15 +69,15 @@ func extractDescription(desc interface{}) string {
 	}
 
 	// If it's an ADF object, extract text from content
-	if adf, ok := desc.(map[string]interface{}); ok {
-		content, ok := adf["content"].([]interface{})
+	if adf, ok := desc.(map[string]any); ok {
+		content, ok := adf["content"].([]any)
 		if !ok {
 			return ""
 		}
 
 		var text strings.Builder
 		for _, item := range content {
-			if itemMap, ok := item.(map[string]interface{}); ok {
+			if itemMap, ok := item.(map[string]any); ok {
 				extractTextFromADF(itemMap, &text)
 			}
 		}
@@ -88,14 +88,14 @@ func extractDescription(desc interface{}) string {
 }
 
 // extractTextFromADF recursively extracts text from ADF nodes
-func extractTextFromADF(node map[string]interface{}, builder *strings.Builder) {
+func extractTextFromADF(node map[string]any, builder *strings.Builder) {
 	if text, ok := node["text"].(string); ok {
 		builder.WriteString(text)
 	}
 
-	if content, ok := node["content"].([]interface{}); ok {
+	if content, ok := node["content"].([]any); ok {
 		for _, item := range content {
-			if itemMap, ok := item.(map[string]interface{}); ok {
+			if itemMap, ok := item.(map[string]any); ok {
 				extractTextFromADF(itemMap, builder)
 			}
 		}
@@ -116,6 +116,22 @@ type IssueType struct {
 	ID      string `json:"id"`
 	Name    string `json:"name"`
 	Subtask bool   `json:"subtask"`
+}
+
+type JiraProject struct {
+	ID   string `json:"id"`
+	Key  string `json:"key"`
+	Name string `json:"name"`
+}
+
+type JiraBoard struct {
+	ID   int    `json:"id"`
+	Name string `json:"name"`
+	Type string `json:"type"`
+}
+
+type BoardsResponse struct {
+	Values []JiraBoard `json:"values"`
 }
 
 func makeJiraRequest(method, url, email, apiKey string, body io.Reader) ([]byte, error) {
@@ -165,7 +181,7 @@ func getSprints(agileURL string, boardID int, email, apiKey string) ([]Sprint, e
 }
 
 func getSprintIssues(agileURL string, sprintID int, email, apiKey string) ([]Issue, error) {
-	jql := url.QueryEscape("type in (Story, Task)")
+	jql := url.QueryEscape("type in (Story, Task, Bug)")
 	url := fmt.Sprintf("%s/sprint/%d/issue?jql=%s", agileURL, sprintID, jql)
 	body, err := makeJiraRequest("GET", url, email, apiKey, nil)
 	if err != nil {
@@ -190,18 +206,18 @@ func getSubtaskIssueTypeID(baseURL, parentKey, email, apiKey string) (string, er
 		return "", err
 	}
 
-	var project map[string]interface{}
+	var project map[string]any
 	if err := json.Unmarshal(body, &project); err != nil {
 		return "", err
 	}
 
-	issueTypesRaw, ok := project["issueTypes"].([]interface{})
+	issueTypesRaw, ok := project["issueTypes"].([]any)
 	if !ok {
 		return "", fmt.Errorf("no issueTypes in project")
 	}
 
 	for _, itRaw := range issueTypesRaw {
-		it, ok := itRaw.(map[string]interface{})
+		it, ok := itRaw.(map[string]any)
 		if !ok {
 			continue
 		}
@@ -226,16 +242,16 @@ func createSubtask(baseURL, parentKey, summary, email, apiKey string) (string, e
 		return "", fmt.Errorf("failed to get subtask issue type: %v", err)
 	}
 
-	payload := map[string]interface{}{
-		"fields": map[string]interface{}{
-			"project": map[string]interface{}{
+	payload := map[string]any{
+		"fields": map[string]any{
+			"project": map[string]any{
 				"key": projectKey,
 			},
-			"parent": map[string]interface{}{
+			"parent": map[string]any{
 				"key": parentKey,
 			},
 			"summary": summary,
-			"issuetype": map[string]interface{}{
+			"issuetype": map[string]any{
 				"id": subtaskTypeID,
 			},
 		},
@@ -252,7 +268,7 @@ func createSubtask(baseURL, parentKey, summary, email, apiKey string) (string, e
 		return "", err
 	}
 
-	var result map[string]interface{}
+	var result map[string]any
 	if err := json.Unmarshal(body, &result); err != nil {
 		return "", err
 	}
@@ -272,7 +288,7 @@ func getCurrentUser(baseURL, email, apiKey string) (string, error) {
 		return "", err
 	}
 
-	var user map[string]interface{}
+	var user map[string]any
 	if err := json.Unmarshal(body, &user); err != nil {
 		return "", err
 	}
@@ -292,7 +308,7 @@ func assignToSelf(baseURL, issueKey, email, apiKey string) error {
 		return fmt.Errorf("failed to get current user: %v", err)
 	}
 
-	payload := map[string]interface{}{
+	payload := map[string]any{
 		"accountId": accountId,
 	}
 
@@ -338,8 +354,8 @@ func getTransitions(baseURL, issueKey, email, apiKey string) ([]Transition, erro
 }
 
 func transitionIssue(baseURL, issueKey, transitionID, email, apiKey string) error {
-	payload := map[string]interface{}{
-		"transition": map[string]interface{}{
+	payload := map[string]any{
+		"transition": map[string]any{
 			"id": transitionID,
 		},
 	}
@@ -371,4 +387,34 @@ func getIssueDetails(baseURL, issueKey, email, apiKey string) (*DetailedIssue, e
 	}
 
 	return &issue, nil
+}
+
+func getAllProjects(baseURL, email, apiKey string) ([]JiraProject, error) {
+	url := fmt.Sprintf("%s/project", baseURL)
+	body, err := makeJiraRequest("GET", url, email, apiKey, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	var projects []JiraProject
+	if err := json.Unmarshal(body, &projects); err != nil {
+		return nil, err
+	}
+
+	return projects, nil
+}
+
+func getProjectBoards(agileURL, projectKeyOrID, email, apiKey string) ([]JiraBoard, error) {
+	url := fmt.Sprintf("%s/board?projectKeyOrId=%s", agileURL, projectKeyOrID)
+	body, err := makeJiraRequest("GET", url, email, apiKey, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	var boardsResp BoardsResponse
+	if err := json.Unmarshal(body, &boardsResp); err != nil {
+		return nil, err
+	}
+
+	return boardsResp.Values, nil
 }
