@@ -2,7 +2,7 @@
 
 A streamlined command-line tool that bridges Jira and Git workflows, designed for developers who want to manage sprint tasks and create branches without leaving the terminal.
 
-It's crafted for my specific needs with Jira, so that I don't have to open the websites poopy UI. Changes and new features might come, use this if it suits your workflow :) 
+It's crafted for my specific needs with Jira, so that I don't have to open the websites poopy UI. Changes and new features might come, use this if it suits your workflow :)
 
 ## What is JIG?
 
@@ -27,7 +27,6 @@ or go install it:
 ```bash
 go install github.com/emilsto/jig@latest
 ```
-
 
 ## Configuration
 
@@ -168,7 +167,7 @@ Add it to your `config.toml` as the `apikey` value.
 Branches are created with the format:
 
 ```
-<branchbase>/<JIRA-TICKET-KEY>-<description>
+<branchbase>/<JIRA-TICKET-KEY>/<description>
 ```
 
 Based on your `branchbase` configuration, branches are created from that base branch (e.g., `develop` or `main`).

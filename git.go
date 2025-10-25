@@ -11,7 +11,7 @@ func createGitBranch(branchBase, subtaskKey, description string) error {
 	description = strings.ToLower(description)
 	description = strings.ReplaceAll(description, " ", "-")
 
-	branchName := fmt.Sprintf("%s%s/%s", branchBase, subtaskKey, description)
+	branchName := fmt.Sprintf("%s/%s/%s", branchBase, subtaskKey, description)
 
 	fmt.Printf("\nCreating git branch: %s\n", branchName)
 	cmd := exec.Command("git", "checkout", "-b", branchName)
