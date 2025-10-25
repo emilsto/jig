@@ -2,6 +2,8 @@
 
 A streamlined command-line tool that bridges Jira and Git workflows, designed for developers who want to manage sprint tasks and create branches without leaving the terminal.
 
+It's crafted for my specific needs with Jira, so that I don't have to open the websites poopy UI. Changes and new features might come, use this if it suits your workflow :) 
+
 ## What is JIG?
 
 JIG is a productivity tool that eliminates context switching between Jira's web interface and your terminal. It fetches your active sprint tickets, allows you to interact with them directly, and automates common workflows like creating branches, assigning tasks, and managing subtasks.
