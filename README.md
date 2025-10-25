@@ -1,4 +1,4 @@
-# JIG Jira's webinterface Isn't Great
+# JIG - Jira's webinterface Isn't Great
 
 A streamlined command-line tool that bridges Jira and Git workflows, designed for developers who want to manage sprint tasks and create branches without leaving the terminal.
 
@@ -14,17 +14,18 @@ Build it from source:
 go build -o jig
 ```
 
+Move the binary to your PATH:
+
+```bash
+mv jig /usr/local/bin/
+```
+
 or go install it:
 
 ```bash
 go install github.com/emilsto/jig@latest
 ```
 
-Move the binary to your PATH:
-
-```bash
-mv jig /usr/local/bin/
-```
 
 ## Configuration
 
